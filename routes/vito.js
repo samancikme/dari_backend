@@ -123,7 +123,8 @@ router.get('/slots/:deviceId', async (req, res) => {
       if (slots.length < 14) {
         const initial = getInitial14Slots(deviceId);
         await Slot.deleteMany({ $or: [{ deviceId }, { device_id: deviceId }] });
-        slots = await Slot.insertMany(initial);
+        const inserted = await Slot.insertMany(initial);
+        slots = inserted.map(doc => (doc.toObject ? doc.toObject() : doc));
       }
 
       const normalizedSlots = slots.map(s => ({
@@ -179,11 +180,11 @@ router.put('/slots/:deviceId/:slotId', async (req, res) => {
       updateFields.time = String(finalTime).trim();
     }
     if (dosage !== undefined) updateFields.dosage = String(dosage).trim();
-    if (status !== undefined) updateFields.status = status;
-
-    if (finalMedName && (!status || status === 'empty')) {
+    if (status !== undefined && status !== '') {
+      updateFields.status = status;
+    } else if (finalMedName && String(finalMedName).trim() !== '') {
       updateFields.status = 'scheduled';
-    } else if (!finalMedName && (!status || status !== 'empty')) {
+    } else {
       updateFields.status = 'empty';
     }
 
@@ -338,7 +339,7 @@ router.get('/patients/:deviceId', async (req, res) => {
   const defaultPatient = {
     deviceId,
     device_id: deviceId,
-    patientName: isSamandar ? 'Samandar (VITO CUBE IoT)' : 'Eshmuradov Anvar Olimovich',
+    patientName: isSamandar ? 'Samandar (VITOCUBE IoT)' : 'Eshmuradov Anvar Olimovich',
     age: isSamandar ? 22 : 64,
     room: isSamandar ? 'qmustartupclub' : '304-palata',
     condition: isSamandar ? 'QMU Startup Club Bo\'limi' : 'Kardiologiya bo\'limi',
