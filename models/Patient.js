@@ -8,6 +8,10 @@ const PatientSchema = new mongoose.Schema(
       unique: true,
       trim: true
     },
+    device_id: {
+      type: String,
+      trim: true
+    },
     patientName: {
       type: String,
       default: 'Eleanor Vance'
@@ -15,6 +19,10 @@ const PatientSchema = new mongoose.Schema(
     age: {
       type: Number,
       default: 72
+    },
+    room: {
+      type: String,
+      default: '304-palata'
     },
     condition: {
       type: String,

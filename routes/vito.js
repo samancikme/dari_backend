@@ -65,52 +65,66 @@ function getInitial14Slots(deviceId) {
 }
 
 function getInitialLogs(deviceId) {
+  let entries = [];
   if (deviceId === 'ESP32-CUBE-02') {
-    return [
+    entries = [
       {
-        _id: `log_${deviceId}_1`,
         deviceId,
+        device_id: deviceId,
         slotId: 2,
+        slot_number: 2,
         medName: 'Amlodipine 5mg',
+        med_name: 'Amlodipine 5mg',
         status: 'dispensed',
         nurseName: 'Hamshira Elena R.',
         timestamp: new Date(Date.now() - 5400000)
       },
       {
-        _id: `log_${deviceId}_2`,
         deviceId,
+        device_id: deviceId,
         slotId: 4,
+        slot_number: 4,
         medName: 'Levothyroxine 50mcg',
+        med_name: 'Levothyroxine 50mcg',
         status: 'dispensed',
         nurseName: 'Hamshira Elena R.',
         timestamp: new Date(Date.now() - 10800000)
       }
     ];
   } else if (deviceId === 'ESP32-CUBE-03') {
-    return [
+    entries = [
       {
-        _id: `log_${deviceId}_1`,
         deviceId,
+        device_id: deviceId,
         slotId: 1,
+        slot_number: 1,
         medName: 'Amoxicillin 500mg',
+        med_name: 'Amoxicillin 500mg',
         status: 'dispensed',
         nurseName: 'Hamshira Elena R.',
         timestamp: new Date(Date.now() - 7200000)
       }
     ];
+  } else {
+    entries = [
+      {
+        deviceId,
+        device_id: deviceId,
+        slotId: 3,
+        slot_number: 3,
+        medName: 'Lisopril 10mg',
+        med_name: 'Lisopril 10mg',
+        status: 'dispensed',
+        nurseName: 'Hamshira Elena R.',
+        timestamp: new Date(Date.now() - 3600000)
+      }
+    ];
   }
 
-  return [
-    {
-      _id: `log_init_1`,
-      deviceId,
-      slotId: 3,
-      medName: 'Lisopril 10mg',
-      status: 'dispensed',
-      nurseName: 'Hamshira Elena R.',
-      timestamp: new Date(Date.now() - 3600000)
-    }
-  ];
+  return entries.map(entry => ({
+    _id: new mongoose.Types.ObjectId().toString(),
+    ...entry
+  }));
 }
 
 router.get('/slots/:deviceId', async (req, res) => {
@@ -232,8 +246,7 @@ router.post('/logs', async (req, res) => {
     return res.status(400).json({ success: false, error: 'deviceId and valid slotId required' });
   }
 
-  const logEntry = {
-    _id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+  const logPayload = {
     deviceId: targetDeviceId,
     device_id: targetDeviceId,
     slotId: numSlotId,
@@ -246,19 +259,25 @@ router.post('/logs', async (req, res) => {
   };
 
   try {
+    let savedDoc = null;
+
     if (mongoose.connection.readyState === 1) {
-      const newLog = new Log(logEntry);
-      await newLog.save();
+      const newLog = new Log(logPayload);
+      savedDoc = await newLog.save();
 
       await Slot.findOneAndUpdate(
         { $or: [{ deviceId: targetDeviceId, slotId: numSlotId }, { device_id: targetDeviceId, slot_number: numSlotId }] },
         { $set: { status: 'dispensed', lastDispensedAt: new Date() } }
       );
     } else {
+      savedDoc = {
+        _id: new mongoose.Types.ObjectId().toString(),
+        ...logPayload
+      };
       if (!memoryLogs[targetDeviceId]) {
         memoryLogs[targetDeviceId] = getInitialLogs(targetDeviceId);
       }
-      memoryLogs[targetDeviceId].unshift(logEntry);
+      memoryLogs[targetDeviceId].unshift(savedDoc);
 
       if (!memorySlots[targetDeviceId]) {
         memorySlots[targetDeviceId] = getInitial14Slots(targetDeviceId);
@@ -273,8 +292,8 @@ router.post('/logs', async (req, res) => {
     return res.status(201).json({
       success: true,
       message: 'Dispense log created successfully',
-      data: logEntry,
-      log: logEntry
+      data: savedDoc,
+      log: savedDoc
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -288,6 +307,11 @@ router.get('/logs/:deviceId', async (req, res) => {
     let logs = [];
     if (mongoose.connection.readyState === 1) {
       logs = await Log.find({ $or: [{ deviceId }, { device_id: deviceId }] }).sort({ timestamp: -1 }).limit(50).lean();
+      if (logs.length === 0) {
+        const initial = getInitialLogs(deviceId);
+        await Log.insertMany(initial);
+        logs = await Log.find({ $or: [{ deviceId }, { device_id: deviceId }] }).sort({ timestamp: -1 }).limit(50).lean();
+      }
     } else {
       if (!memoryLogs[deviceId]) {
         memoryLogs[deviceId] = getInitialLogs(deviceId);
@@ -351,6 +375,9 @@ router.get('/patients/:deviceId', async (req, res) => {
       let patient = await Patient.findOne({ $or: [{ deviceId }, { device_id: deviceId }] }).lean();
       if (!patient) {
         patient = await Patient.create(defaultPatient);
+      } else if (!patient.room) {
+        await Patient.updateOne({ _id: patient._id }, { $set: { room: defaultPatient.room } });
+        patient.room = defaultPatient.room;
       }
       return res.json({ success: true, data: patient, patient });
     } else {
