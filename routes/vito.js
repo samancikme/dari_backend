@@ -367,6 +367,7 @@ router.get('/patients/:deviceId', async (req, res) => {
     age: isSamandar ? 22 : 64,
     room: isSamandar ? 'qmustartupclub' : '304-palata',
     condition: isSamandar ? 'QMU Startup Club Bo\'limi' : 'Kardiologiya bo\'limi',
+    phone: '',
     notes: 'Qurilma miyasi (ESP32 IoT) faol holatda.'
   };
 
@@ -375,9 +376,14 @@ router.get('/patients/:deviceId', async (req, res) => {
       let patient = await Patient.findOne({ $or: [{ deviceId }, { device_id: deviceId }] }).lean();
       if (!patient) {
         patient = await Patient.create(defaultPatient);
-      } else if (!patient.room) {
-        await Patient.updateOne({ _id: patient._id }, { $set: { room: defaultPatient.room } });
-        patient.room = defaultPatient.room;
+      } else {
+        const updates = {};
+        if (!patient.room) updates.room = defaultPatient.room;
+        if (patient.phone === undefined || patient.phone === null) updates.phone = '';
+        if (Object.keys(updates).length > 0) {
+          await Patient.updateOne({ _id: patient._id }, { $set: updates });
+          patient = { ...patient, ...updates };
+        }
       }
       return res.json({ success: true, data: patient, patient });
     } else {
@@ -391,4 +397,66 @@ router.get('/patients/:deviceId', async (req, res) => {
   }
 });
 
+// PUT /api/patients/:deviceId — Bemor ma'lumotlarini yangilash (ism, telefon, yosh, palata, kasalligi)
+router.put('/patients/:deviceId', async (req, res) => {
+  const { deviceId } = req.params;
+  const { patientName, age, room, condition, phone, notes } = req.body;
+
+  const updateFields = {};
+  if (patientName !== undefined) updateFields.patientName = String(patientName).trim();
+  if (age !== undefined && !isNaN(Number(age))) updateFields.age = Number(age);
+  if (room !== undefined) updateFields.room = String(room).trim();
+  if (condition !== undefined) updateFields.condition = String(condition).trim();
+  if (phone !== undefined) updateFields.phone = String(phone).trim();
+  if (notes !== undefined) updateFields.notes = String(notes).trim();
+
+  if (Object.keys(updateFields).length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'Validation Error',
+      message: 'Kamida bitta maydon (patientName, age, room, condition, phone, notes) talab qilinadi.'
+    });
+  }
+
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const updated = await Patient.findOneAndUpdate(
+        { $or: [{ deviceId }, { device_id: deviceId }] },
+        { $set: { ...updateFields, deviceId, device_id: deviceId } },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+      ).lean();
+
+      return res.json({
+        success: true,
+        message: 'Bemor ma\'lumotlari muvaffaqiyatli yangilandi',
+        data: updated,
+        patient: updated
+      });
+    } else {
+      if (!memoryPatients[deviceId]) {
+        memoryPatients[deviceId] = {
+          deviceId,
+          device_id: deviceId,
+          patientName: '',
+          age: 0,
+          room: '',
+          condition: '',
+          phone: '',
+          notes: ''
+        };
+      }
+      memoryPatients[deviceId] = { ...memoryPatients[deviceId], ...updateFields, updatedAt: new Date() };
+      return res.json({
+        success: true,
+        message: 'Bemor ma\'lumotlari yangilandi (in-memory)',
+        data: memoryPatients[deviceId],
+        patient: memoryPatients[deviceId]
+      });
+    }
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
+

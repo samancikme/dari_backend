@@ -28,6 +28,11 @@ const PatientSchema = new mongoose.Schema(
       type: String,
       default: 'Post-Op Cardiac Care'
     },
+    phone: {
+      type: String,
+      default: '',
+      trim: true
+    },
     notes: {
       type: String,
       default: 'Requires daily morning & evening medication reminders.'

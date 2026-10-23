@@ -10,6 +10,7 @@ const config = require('./config');
 const apiRoutes = require('./routes/api');
 const vitoRoutes = require('./routes/vito');
 const authRoutes = require('./routes/auth');
+const nursesRoutes = require('./routes/nurses');
 
 const app = express();
 
@@ -36,6 +37,10 @@ app.get('/', (req, res) => {
       createLog: 'POST /api/logs',
       patients: 'GET /api/patients',
       patientDetails: 'GET /api/patients/:deviceId',
+      updatePatient: 'PUT /api/patients/:deviceId',
+      nurses: 'GET /api/nurses',
+      nurseDetails: 'GET /api/nurses/:username',
+      updateNurse: 'PUT /api/nurses/:username',
       telemetry: 'GET/POST /api/data',
       telemetryStats: 'GET /api/data/stats'
     }
@@ -46,6 +51,7 @@ app.get('/', (req, res) => {
 app.use('/api', authRoutes);
 app.use('/api', apiRoutes);
 app.use('/api', vitoRoutes);
+app.use('/api', nursesRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

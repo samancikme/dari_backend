@@ -28,6 +28,11 @@ const NurseSchema = new mongoose.Schema(
     ward: {
       type: String,
       default: 'Ward 4B - Cardiology'
+    },
+    phone: {
+      type: String,
+      default: '',
+      trim: true
     }
   },
   { timestamps: true }
